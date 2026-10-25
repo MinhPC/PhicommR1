@@ -1,0 +1,22 @@
+# Cấu hình đã đối chiếu với config.yaml và docker-compose.yml upstream v0.9.7 (xem upstream/).
+# Chưa chạy thử lần nào tính tới lúc ghi; kết quả thử được ghi vào CLAUDE.md.
+# Trước khi chạy: python tutor/tools/gen_config.py  (sinh data/.config.yaml từ .env)
+services:
+  xiaozhi-server:
+    build: .
+    image: tutor-xiaozhi:0.9.7
+    container_name: xiaozhi-server
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined        # theo compose upstream
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+    ports:
+      - "8000:8000"               # WebSocket
+      - "8003:8003"               # OTA / HTTP
+    volumes:
+      - ./data:/opt/xiaozhi-esp32-server/data
+      - ./models/SenseVoiceSmall/model.pt:/opt/xiaozhi-esp32-server/models/SenseVoiceSmall/model.pt
+      - ./tutor/prompt-template.txt:/opt/xiaozhi-esp32-server/prompt-template.txt:ro
+      - ./tutor:/opt/xiaozhi-esp32-server/tutor
+      - ./tutor/tts_edge_stream.py:/opt/xiaozhi-esp32-server/core/providers/tts/edge_stream.py:ro   # TUTOR-PATCH: Edge streaming

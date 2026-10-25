@@ -1,0 +1,23 @@
+# Hồ sơ hai bé và gắn thiết bị. Các giá trị trong <...> là CHỖ TRỐNG, Minh điền.
+# Định dạng device_id: MAC viết thường, ngăn bằng dấu hai chấm.
+children:
+  - id: be_a
+    name: "<tên bé A>"
+    level: 2                    # 1 = mới bắt đầu … 5 = khá
+    book: global_success        # thư mục tutor/curriculum/<book>; chưa xác nhận bộ sách
+    current_unit: 5
+    little_fox_level: 2
+    daily_minutes: { talk: 15, story: 15 }
+  - id: be_b
+    name: "<tên bé B>"
+    level: 1
+    book: global_success
+    current_unit: 3
+    little_fox_level: 1
+    daily_minutes: { talk: 15, story: 15 }
+
+devices:
+  # R1: với client kuteo là header `device-id` tự sinh (vd. 32:83:a0:82:68:c4); với app gốc là MAC thật fc:7c:02:57:7c:0b.
+  # Chưa chốt hướng cho R1 (xem CLAUDE.md A2.1) nên để trống tới khi biết giá trị thật.
+  "<device_id_R1>":    { child: be_a, type: r1,    has_screen: false }
+  "<device_id_ESP32>": { child: be_b, type: esp32, has_screen: true }

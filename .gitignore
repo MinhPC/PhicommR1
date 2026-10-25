@@ -1,0 +1,24 @@
+# Bí mật và dữ liệu cục bộ
+.env
+data/.config.yaml
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/stories/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+
+# Công cụ
+*.log
+
+# Mã upstream tham chiếu (clone tag v0.9.7)
+upstream/
+docker-pull.log
+
+# Mô hình tải riêng (SenseVoice ~900 MB)
+models/
