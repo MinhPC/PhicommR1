@@ -142,6 +142,26 @@ devices:                        # gắn thiết bị ↔ bé; đổi ở đây k
 
 > Tham chiếu đã đo (không phải cấu hình của spec): server xinnan 0.9.7 + Gemini (endpoint OpenAI) + Edge TTS tiếng Việt cho **~10 s** từ lúc gửi câu tới câu nói đầu tiên (lệnh gõ chữ, bỏ qua ASR/VAD). Cần đo lại với cấu hình của spec; mục tiêu ≤ 2 s chưa được chứng minh khả thi.
 
+> **Quyết định 2026-10-25 (Minh trả lời "2", mình hiểu là lựa chọn thứ hai):** mục tiêu tổng **1,5 s**, không phải 2,2 s (tổng các mục tiêu từng bước ở bảng trên). Cộng các bước ở bảng hiện cho 0,8 + 0,4 + 0,7 + 0,3 = 2,2 s nên muốn đạt 1,5 s phải **chồng các bước** (TTS bắt đầu ngay khi LLM xong câu đầu, không chờ cả câu trả lời) hoặc giảm ít nhất một bước; VAD 0,8 s là phần lớn nhất. Đo thực tế LLM `gpt-4o-mini` streaming, kết nối tái dùng, từ mạng của Minh: tới **token đầu tiên** trung vị 0,68 s (min 0,63, max 1,19; 5 lượt), chưa tính tới câu đầu hoàn chỉnh. Đường chạy server: **Docker** (đã cài Docker Desktop 4.96.3 ngày 2026-10-25).
+
+> **Số đo Tier 1 thật (2026-10-25, Docker, `tutor-xiaozhi:0.9.7`, SenseVoice + `gpt-4o-mini` + Edge `en-US-AnaNeural`, client giả `tutor/tools/e2e_latency.py`):**
+> | Đoạn | Đo được |
+> |---|---|
+> | Tổng từ lúc nói xong tới **âm thanh đầu tiên** | **trung vị 2,32 s** (max 2,39 s; 3 lượt, bỏ lượt khởi động) → **chưa đạt 1,5 s** |
+> | ASR (tới khi server báo `stt`) | ~0,42 s, nhận đúng câu "I like swimming" |
+> | LLM tới token/dấu câu đầu, đo từ **trong container** | 0,57 / 0,59 s (min 0,54, max 1,36) |
+> | Edge TTS tới khối âm thanh đầu (đo riêng, `edge-tts` 7.3.1) | ~0,35 s (cả câu ~0,5 s) |
+> | Từ lúc server nhận tin tới lúc gửi câu đầu cho TTS (log server) | 1,4–1,8 s |
+>
+> Cộng riêng lẻ (LLM 0,6 + TTS 0,35) chỉ ~1 s nên **còn ~0,8–0,9 s nằm trong xử lý của server upstream** mà **chưa xác định nguyên nhân** (giả thuyết: Edge TTS đi qua file mp3 rồi đổi sang Opus, hoặc chờ đủ câu; chưa kiểm chứng). Các lưu ý: câu thử là giọng người lớn tổng hợp (không phải giọng trẻ), và đoạn im lặng cuối clip làm phép đo hơi **có lợi** cho phần chờ VAD, nên độ trễ thật có thể cao hơn; chưa đo trên giọng thật của bé, chưa đo qua mạng tới thiết bị. Hướng giảm trễ để thử sau: TTS dạng streaming (upstream có `openai`, `*_stream`), mở đầu câu trả lời bằng một từ ngắn để phát ngay, giảm chờ VAD.
+>
+> **Phân tích thêm (2026-10-25):** upstream xử lý TTS **không streaming**: mỗi câu `edge-tts` mở WebSocket mới tới Microsoft, gom cả câu thành mp3 trong bộ nhớ, rồi `pydub`/ffmpeg đổi sang Opus. Đo bằng chính hàm của server: tổng hợp cả câu ngắn ~0,57 s + mp3→Opus ~0,15 s = **~0,72 s trước khi gửi được khung đầu**. Đây là phần lớn khoảng "mất" ở trên; ~0,5 s còn lại chưa giải thích được.
+>
+> **So với TTS của OpenAI** (provider `openai` của upstream, không streaming, `requests.post` mỗi câu; đo trong container, câu "That is great", 5 lượt sau khi bỏ lượt đầu): `tts-1` byte đầu **1,5–2,3 s** (cả câu 1,6–2,5 s), `gpt-4o-mini-tts` byte đầu **0,74 s** (cả câu 1,28 s). **Cả hai chậm hơn Edge** (~0,57 s cả câu), nên **không chuyển sang OpenAI TTS vì lý do độ trễ**. Mẫu nhỏ, đo một buổi, biến động có thể lớn. Edge vẫn kém ổn định (3/15 câu lỗi `No audio was received`).
+> **Đã làm (2026-10-25): provider Edge streaming** `type: edge_stream` (`tutor/edge_stream_core.py` + lớp mỏng `tutor/tts_edge_stream.py`, mount vào `core/providers/tts/edge_stream.py`; `TUTOR-PATCH`: chỉ ghi đè `to_tts_stream`, dùng lại provider `edge` upstream). Nhận khối mp3 từ Edge, đưa qua một tiến trình ffmpeg `-probesize 32 -analyzeduration 0 -fflags nobuffer`, mã hoá Opus bằng `OpusEncoderUtils.encode_pcm_to_opus_stream` và gọi `opus_handler` ngay khi có khung. Đo riêng: khung Opus đầu **0,39–0,41 s** (so với ~0,72 s cách cũ), số khung gần bằng nhau.
+>
+> **Kết quả đầu-cuối sau khi bật** (client giả, giọng người lớn tổng hợp, từ lúc nói xong tới âm thanh đầu): câu "I like swimming" trung vị **1,51 s** (max 1,62; 7 lượt), câu "My favorite color is blue and I have a red bike" trung vị **1,62 s** (max 2,01; 7 lượt); trước đó 2,32 s. **Vẫn gần chứ chưa chắc đạt 1,5 s**, và chưa đo giọng bé, chưa đo qua mạng tới thiết bị. Giải mã Opus nhận được cho thấy tín hiệu thật (RMS ~3500, không chạm trần, ~6,5 s); **chưa nghe bằng tai** nên chưa xác nhận độ rõ. Nếu retry: chỉ thử lại khi chưa phát khung nào (tránh lặp âm).
+
 ## A6. Kiến trúc
 
 ```
